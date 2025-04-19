@@ -52,7 +52,7 @@ type CronJobReconciler struct {
 func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// cronjob := r.Client.
 
 	return ctrl.Result{}, nil
 }
