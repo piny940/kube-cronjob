@@ -25,6 +25,6 @@ jobs:
       - run: |
           make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:0.${{ github.run_number }}.0
           make kustomize-build IMG=ghcr.io/${{ github.repository }}:0.${{ github.run_number }}.0
-          gh release create --latest -t 0.${{ github.run_number }}.0 0.${{ github.run_number }}.0 manifests.out
+          gh release create --latest -t v0.${{ github.run_number }}.0 0.${{ github.run_number }}.0 manifests.out
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
