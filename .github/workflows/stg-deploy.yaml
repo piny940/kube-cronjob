@@ -22,8 +22,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ inputs.github-actor }}
-          password: ${{ inputs.gh-token }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - run: make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
         env:
           gh-token: ${{ secrets.GITHUB_TOKEN }}
@@ -41,8 +41,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ inputs.github-actor }}
-          password: ${{ inputs.gh-token }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - run: make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
         env:
           gh-token: ${{ secrets.GITHUB_TOKEN }}
