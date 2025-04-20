@@ -23,8 +23,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: |
-          make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ github.run_number }}
-          make kustomize-build IMG=ghcr.io/${{ github.repository }}:${{ github.sha }}-${{ github.run_number }}
-          gh release create ${{ github.sha }}-${{ github.run_number }} manifests.out
+          make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:0.${{ github.run_number }}.0
+          make kustomize-build IMG=ghcr.io/${{ github.repository }}:0.${{ github.run_number }}.0
+          gh release create 0.${{ github.run_number }}.0 manifests.out
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
