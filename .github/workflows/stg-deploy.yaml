@@ -19,15 +19,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
+        env:
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
       - run: |
           make kustomize-build IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
           gh release create stg-${{ github.sha }}-${{ github.run_number }} manifests.out
+        env:
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
   stg-build-main:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - run: make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
+        env:
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
       - run: |
           make kustomize-build IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
           gh release create stg-${{ github.sha }}-${{ github.run_number }} manifests.out
+        env:
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
