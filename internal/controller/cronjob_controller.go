@@ -37,6 +37,11 @@ import (
 const (
 	scheduledTimeAnnotation = "app.piny940.com/scheduled-at"
 	maxMissedRun            = 100
+	jobOwnerKey             = ".metadata.controller"
+)
+
+var (
+	apiGVStr = appv1alpha1.GroupVersion.String()
 )
 
 // CronJobReconciler reconciles a CronJob object
@@ -72,7 +77,7 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	var jobs batchv1.JobList
 	if err := r.Client.List(ctx, &jobs, client.InNamespace(req.Namespace), client.MatchingFields{
-		"jobOwnerKey": req.Name,
+		jobOwnerKey: req.Name,
 	}); err != nil {
 		log.Error(err, "failed to list child jobs", "cronjob", req.Name)
 		return ctrl.Result{}, err
@@ -296,7 +301,26 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Clock == nil {
+		r.Clock = realClock{}
+	}
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &batchv1.Job{}, jobOwnerKey, func(rawObj client.Object) []string {
+		job := rawObj.(*batchv1.Job)
+		owner := metav1.GetControllerOf(job)
+		if owner == nil {
+			return nil
+		}
+		if owner.APIVersion != apiGVStr || owner.Kind != "CronJob" {
+			return nil
+		}
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appv1alpha1.CronJob{}).
+		Owns(&batchv1.Job{}).
+		Named("cronjob").
 		Complete(r)
 }
