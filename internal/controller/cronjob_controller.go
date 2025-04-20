@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -27,13 +28,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	appv1alpha1 "github.com/piny940/kube-cronjob/api/v1alpha1"
+	"github.com/robfig/cron"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ref "k8s.io/client-go/tools/reference"
 )
 
-var (
+const (
 	scheduledTimeAnnotation = "app.piny940.com/scheduled-at"
+	maxMissedRun            = 100
 )
 
 // CronJobReconciler reconciles a CronJob object
@@ -179,7 +182,116 @@ func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	return ctrl.Result{}, nil
+	getNextSchedule := func(cronjob *appv1alpha1.CronJob, now time.Time) (lastMissed time.Time, next time.Time, err error) {
+		sched, err := cron.ParseStandard(cronjob.Spec.Schedule)
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("Unparsable schedule: %q: %v", cronjob.Spec.Schedule, err)
+		}
+
+		var earliestTime time.Time
+		if cronjob.Status.LastScheduleTime != nil {
+			earliestTime = cronjob.Status.LastScheduleTime.Time
+		} else {
+			earliestTime = cronjob.ObjectMeta.CreationTimestamp.Time
+		}
+		if cronjob.Spec.StartingDeadlineSeconds != nil {
+			schedulingDeadline := now.Add(-time.Second * time.Duration(*cronjob.Spec.StartingDeadlineSeconds))
+
+			if schedulingDeadline.After(earliestTime) {
+				earliestTime = schedulingDeadline
+			}
+		}
+		if earliestTime.After(now) {
+			return time.Time{}, sched.Next(now), nil
+		}
+
+		starts := 0
+		for t := sched.Next(earliestTime); !t.After(now); t = sched.Next(t) {
+			starts++
+			lastMissed = t
+			if starts > maxMissedRun {
+				return time.Time{}, time.Time{}, fmt.Errorf("too many missed start times (> %d). Set or decrease .spec.startingDeadlineSeconds or check clock sker", maxMissedRun)
+			}
+		}
+		return lastMissed, sched.Next(now), nil
+	}
+	missedRun, nextRun, err := getNextSchedule(&cronjob, r.Now())
+	if err != nil {
+		log.Error(err, "failed to figure out CronJob schedule")
+		// we don't really care about requeuing until we get an update that
+		// fixes the schedule, so don't return an error
+		return ctrl.Result{}, nil
+	}
+	schedResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}
+	log = log.WithValues("now", r.Now(), "next run", nextRun)
+
+	if missedRun.IsZero() {
+		log.V(1).Info("no upcoming scheduled times, sleeping until next")
+		return schedResult, nil
+	}
+
+	log = log.WithValues("current run", missedRun)
+	tooLate := false
+	if cronjob.Spec.StartingDeadlineSeconds != nil {
+		deadline := r.Now().Add(-time.Second * time.Duration(*cronjob.Spec.StartingDeadlineSeconds))
+		tooLate = missedRun.Before(deadline)
+	}
+	if tooLate {
+		log.V(1).Info("missed starting deadline for last run, sleeping till next")
+		return schedResult, nil
+	}
+
+	if cronjob.Spec.ConcurrencyPolicy == appv1alpha1.ForbitConcurrent && len(activeJobs) > 0 {
+		log.V(1).Info("concurrency policy blocks concurrent runs, skipping", "num active", len(activeJobs))
+		return schedResult, nil
+	}
+
+	if cronjob.Spec.ConcurrencyPolicy == appv1alpha1.ReplaceConcurrent {
+		for _, activeJob := range activeJobs {
+			if err := r.Delete(ctx, activeJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
+				log.Error(err, "failed to delete active job", "job", activeJob)
+				return ctrl.Result{}, err
+			}
+		}
+	}
+
+	constructJob := func(cronJob *appv1alpha1.CronJob, scheduledTime time.Time) (*batchv1.Job, error) {
+		name := fmt.Sprintf("%s-%d", cronJob.Name, scheduledTime.Unix())
+
+		job := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:      make(map[string]string),
+				Annotations: make(map[string]string),
+				Name:        name,
+				Namespace:   cronJob.Namespace,
+			},
+			Spec: *cronJob.Spec.JobTemplate.Spec.DeepCopy(),
+		}
+		for k, v := range cronjob.Spec.JobTemplate.Annotations {
+			job.Annotations[k] = v
+		}
+		job.Annotations[scheduledTimeAnnotation] = scheduledTime.Format(time.RFC3339)
+		for k, v := range cronJob.Spec.JobTemplate.Labels {
+			job.Labels[k] = v
+		}
+		if err := ctrl.SetControllerReference(cronJob, job, r.Scheme); err != nil {
+			return nil, err
+		}
+		return job, nil
+	}
+	job, err := constructJob(&cronjob, missedRun)
+	if err != nil {
+		log.Error(err, "failed to construct job from template")
+		// don't bother requeuing until we get a change to the spec
+		return schedResult, nil
+	}
+	if err := r.Create(ctx, job); err != nil {
+		log.Error(err, "failed to create job for CronJob", "job", job)
+		return ctrl.Result{}, err
+	}
+	log.V(1).Info("created Job for CronJob run", "job", job)
+
+	return schedResult, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
