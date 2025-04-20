@@ -31,7 +31,7 @@ jobs:
           make kustomize-build IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
           gh release create stg-${{ github.sha }}-${{ github.run_number }} manifests.out
         env:
-          gh-token: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   stg-build-main:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
