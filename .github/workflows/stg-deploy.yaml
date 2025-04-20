@@ -24,10 +24,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
-        env:
-          gh-token: ${{ secrets.GITHUB_TOKEN }}
       - run: |
+          make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
           make kustomize-build IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
           gh release create stg-${{ github.sha }}-${{ github.run_number }} manifests.out
         env:
@@ -43,11 +41,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
-        env:
-          gh-token: ${{ secrets.GITHUB_TOKEN }}
       - run: |
+          make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
           make kustomize-build IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
           gh release create stg-${{ github.sha }}-${{ github.run_number }} manifests.out
         env:
-          gh-token: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
