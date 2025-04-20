@@ -7,4 +7,14 @@ layout:
 - go.kubebuilder.io/v4
 projectName: kube-cronjob
 repo: github.com/piny940/kube-cronjob
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: piny940.com
+  group: app
+  kind: CronJob
+  path: github.com/piny940/kube-cronjob/api/v1alpha1
+  version: v1alpha1
 version: "3"
