@@ -1,0 +1,49 @@
+name: Build App for Staging
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+jobs:
+  stg-build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    environment: staging # 管理者の承認を必要とする
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
+          make kustomize-build IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
+          gh release create stg-${{ github.sha }}-${{ github.run_number }} manifests.out
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  stg-build-main:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          make docker-build docker-push IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
+          make kustomize-build IMG=ghcr.io/${{ github.repository }}:stg-${{ github.sha }}-${{ github.run_number }}
+          gh release create stg-${{ github.sha }}-${{ github.run_number }} manifests.out
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
